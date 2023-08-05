@@ -47,8 +47,7 @@ def build_mlp(input_placeholder, output_size, scope, n_layers, size, activation=
         model = input_placeholder
         for _ in range(n_layers):
             model = tf.layers.dense(inputs = model, units = size, activation = activation)
-        output_placeholder = tf.layers.dense(model, output_size, output_activation)
-        return output_placeholder
+        return tf.layers.dense(model, output_size, output_activation)
 
 def pathlength(path):
     return len(path["reward"])
@@ -144,19 +143,15 @@ class Agent(object):
                 Pass in self.n_layers for the 'n_layers' argument, and
                 pass in self.size for the 'size' argument.
         """
-        #raise NotImplementedError
         if self.discrete:
-            # YOUR_CODE_HERE
-            sy_logits_na = build_mlp(sy_ob_no, self.ac_dim, 'policy', self.n_layers, self.size)
-            return sy_logits_na
-        else:
-            # YOUR_CODE_HERE
-            sy_mean = build_mlp(sy_ob_no, self.ac_dim, 'policy', self.n_layers, self.size)
-            #print(self.ac_dim)
-            sy_logstd = tf.get_variable('logits', [self.ac_dim])
-            #print(sy_logstd.shape)
+            return build_mlp(sy_ob_no, self.ac_dim, 'policy', self.n_layers, self.size)
+        # YOUR_CODE_HERE
+        sy_mean = build_mlp(sy_ob_no, self.ac_dim, 'policy', self.n_layers, self.size)
+        #print(self.ac_dim)
+        sy_logstd = tf.get_variable('logits', [self.ac_dim])
+        #print(sy_logstd.shape)
 
-            return (sy_mean, sy_logstd)
+        return (sy_mean, sy_logstd)
 
     #========================================================================================#
     #                           ----------PROBLEM 2----------
@@ -227,14 +222,15 @@ class Agent(object):
         if self.discrete:
             sy_logits_na = policy_parameters
             # YOUR_CODE_HERE
-            sy_logprob_n = -tf.nn.sparse_softmax_cross_entropy_with_logits (labels=sy_ac_na, logits=sy_logits_na)
+            return -tf.nn.sparse_softmax_cross_entropy_with_logits(
+                labels=sy_ac_na, logits=sy_logits_na
+            )
         else:
             sy_mean, sy_logstd = policy_parameters
             # YOUR_CODE_HERE
             #sy_logprob_n = - tf.contrib.distributions.MultivariateNormalDiag (loc=sy_mean, scale_diag=tf.exp(sy_logstd) ).log_prob(sy_ac_na)
             sy_z = (sy_ac_na - sy_mean) / tf.exp(sy_logstd)
-            sy_logprob_n = -0.5 * tf.reduce_sum(tf.square(sy_z), axis = 1)
-        return sy_logprob_n
+            return -0.5 * tf.reduce_sum(tf.square(sy_z), axis = 1)
 
     def build_computation_graph(self):
         """
@@ -305,7 +301,7 @@ class Agent(object):
         timesteps_this_batch = 0
         paths = []
         while True:
-            animate_this_episode=(len(paths)==0 and (itr % 10 == 0) and self.animate)
+            animate_this_episode = not paths and itr % 10 == 0 and self.animate
             path = self.sample_trajectory(env, animate_this_episode)
             paths.append(path)
             timesteps_this_batch += pathlength(path)
@@ -331,10 +327,11 @@ class Agent(object):
             steps += 1
             if done or steps > self.max_path_length:
                 break
-        path = {"observation" : np.array(obs, dtype=np.float32), 
-                "reward" : np.array(rewards, dtype=np.float32), 
-                "action" : np.array(acs, dtype=np.float32)}
-        return path
+        return {
+            "observation": np.array(obs, dtype=np.float32),
+            "reward": np.array(rewards, dtype=np.float32),
+            "action": np.array(acs, dtype=np.float32),
+        }
 
     #====================================================================================#
     #                           ----------PROBLEM 3----------
@@ -405,31 +402,24 @@ class Agent(object):
             Store the Q-values for all timesteps and all trajectories in a variable 'q_n',
             like the 'ob_no' and 'ac_na' above. 
         """
+        q_n = []
         # YOUR_CODE_HERE
-        if self.reward_to_go:
-            q_n = []
-            for reward in re_n:
-                episode_length = len(reward)
+        for reward in re_n:
+            episode_length = len(reward)
+                # YOUR_CODE_HERE
+            if self.reward_to_go:
                 q = np.zeros(episode_length)
                 q[-1] = reward[-1]
                 for i in reversed(range(episode_length - 1)):
                     q[i] = reward[i] + self.gamma * q[i + 1]
-                q_n.extend(q)
+                    #raise NotImplementedError
+            else:
 
-            #raise NotImplementedError
-        else:
-
-            q_n = []
-            for reward in re_n:
-                ret_tau = 0
-                episode_length = len(reward)
-                for i in range(episode_length):
-                    ret_tau += (self.gamma ** i) * reward[i]
+                ret_tau = sum((self.gamma ** i) * reward[i] for i in range(episode_length))
                 q = np.ones(shape = [episode_length]) * ret_tau
-                q_n.extend(q)
+                    #raise NotImplementedError
+            q_n.extend(q)
 
-
-            #raise NotImplementedError
         return q_n
 
     def compute_advantage(self, ob_no, q_n):
@@ -464,10 +454,9 @@ class Agent(object):
             #raise NotImplementedError
             output_baseline = self.sess.run(self.baseline_prediction, feed_dict = {self.sy_ob_no: ob_no})
             b_n = norm(output_baseline, np.mean(q_n), np.std(q_n))
-            adv_n = q_n - b_n
+            return q_n - b_n
         else:
-            adv_n = q_n.copy()
-        return adv_n
+            return q_n.copy()
 
     def estimate_return(self, ob_no, re_n):
         """
@@ -698,7 +687,9 @@ def main():
 
     if not(os.path.exists('data')):
         os.makedirs('data')
-    logdir = args.exp_name + '_' + args.env_name + '_' + time.strftime("%d-%m-%Y_%H-%M-%S")
+    logdir = f'{args.exp_name}_{args.env_name}_' + time.strftime(
+        "%d-%m-%Y_%H-%M-%S"
+    )
     logdir = os.path.join('data', logdir)
     if not(os.path.exists(logdir)):
         os.makedirs(logdir)

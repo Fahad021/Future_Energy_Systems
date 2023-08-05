@@ -42,10 +42,7 @@ class MultipleDeviceEnvironment:
         return np.array(obs)
 
     def reward(self, action):
-        r = 0
-        for d, a in zip(self.devices, action):
-            r += d.reward(a)
-        return r
+        return sum(d.reward(a) for d, a in zip(self.devices, action))
 
     def step(self, action):
         self.history_actions.append(action)

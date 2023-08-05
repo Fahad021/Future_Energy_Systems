@@ -123,4 +123,4 @@ if __name__ == '__main__':
         ob, r, done, _ = env.step(a)
         rewards.append(r)
         print(f'action: {a}, reward: {r}, obs: {ob}')
-    print("Mean reward of random actions: %s " % (sum(rewards) / len(rewards)))
+    print(f"Mean reward of random actions: {sum(rewards) / len(rewards)} ")

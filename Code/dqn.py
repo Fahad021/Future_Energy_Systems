@@ -12,7 +12,7 @@ from multiple_device_env import MultipleDeviceEnvironment
 class GymDQNLearner:
     def __init__(self, multiple, num_devices):
         if multiple:
-            self.saving_path = './saved_models/dqn/multiple/%s/' % (num_devices)
+            self.saving_path = f'./saved_models/dqn/multiple/{num_devices}/'
         else:
             self.saving_path = './saved_models/dqn/single/'
 
@@ -68,7 +68,7 @@ class GymDQNLearner:
         # total_reward = len(trajectory)
         total_reward = np.sum([t[2] for t in trajectory])
         # cum_reward = np.cumsum([t[2] for t in trajectory])
-        return [total_reward for i, t in enumerate(trajectory)]
+        return [total_reward for _ in trajectory]
 
     def add_to_memory(self, trajectory):
         weights = self.get_state_weights(trajectory)
@@ -92,14 +92,13 @@ class GymDQNLearner:
         return exps / np.sum(exps)
 
     def sample_from_memory(self):
-        if self.experience_replay_memory.shape[0] > 1:
-            weights = np.array([exp['weight'] for exp in self.experience_replay_memory])
-            # p = weights / np.sum(weights)
-            p = self.softmax(weights)
-            return np.random.choice(self.experience_replay_memory,
-                                    np.min([self.batch_size, self.experience_replay_memory.shape[0]]), p=p)
-        else:
+        if self.experience_replay_memory.shape[0] <= 1:
             return self.experience_replay_memory
+        weights = np.array([exp['weight'] for exp in self.experience_replay_memory])
+        # p = weights / np.sum(weights)
+        p = self.softmax(weights)
+        return np.random.choice(self.experience_replay_memory,
+                                np.min([self.batch_size, self.experience_replay_memory.shape[0]]), p=p)
 
     def create_multilayer_dense(self, scope, layer_input, layer_units, layer_activations, keep_probs=None,
                                 regularizers=None, reuse_vars=None):
@@ -111,10 +110,7 @@ class GymDQNLearner:
                 keep_probs = [1. for _ in layer_units]
             for i, (layer_size, activation, keep_prob, reg) in enumerate(zip(layer_units, layer_activations,
                                                                              keep_probs, regularizers)):
-                if i == 0:
-                    inp = layer_input
-                else:
-                    inp = last_layer
+                inp = layer_input if i == 0 else last_layer
                 last_layer = tf.layers.dense(inp, layer_size, activation, activity_regularizer=reg)
                 if keep_prob != 1.0:
                     last_layer = tf.nn.dropout(last_layer, keep_prob)
@@ -180,7 +176,7 @@ class GymDQNLearner:
         while epoch < self.epochs:
             self.generate_new_trajectories(epoch)
             epoch_loss = None
-            for sub_epoch_id in range(self.train_per_epoch):
+            for _ in range(self.train_per_epoch):
                 batch_observations, batch_q_values = self.create_batch()
                 _, epoch_loss = self.sess.run((self.train_op, self.loss),
                                               {self.inputs: batch_observations, self.outputs: batch_q_values})
@@ -248,7 +244,7 @@ class GymDQNLearner:
         self.sess.run(tf.local_variables_initializer())
         if not os.path.exists(self.saving_path):
             os.makedirs(self.saving_path)
-        if not tf.train.checkpoint_exists(self.saving_path + 'checkpoint'):
+        if not tf.train.checkpoint_exists(f'{self.saving_path}checkpoint'):
             print('Saved temp_models not found! Randomly initialized.')
         else:
             self.saver.restore(self.sess, self.saving_path)
